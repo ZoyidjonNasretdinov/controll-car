@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vision Steer - AI Camera Controller</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <!-- MediaPipe Hands -->
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"
+      crossorigin="anonymous"
+    ></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js"
+      crossorigin="anonymous"
+    ></script>
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Header -->
+      <header class="glass-panel">
+        <h1>Vision Steer</h1>
+        <p>Computer Vision Steering Wheel</p>
+        <div id="status" class="status loading">Initializing AI Camera...</div>
+      </header>
+
+      <!-- Main View -->
+      <main>
+        <div class="video-container glass-panel">
+          <video class="input_video" autoplay playsinline></video>
+          <canvas class="output_canvas" width="640" height="480"></canvas>
+          <!-- Virtual Steering Wheel Overlay -->
+          <div id="steering-wheel-container">
+            <img id="steering-wheel" src="wheel.svg" alt="Steering Wheel" />
+          </div>
+
+          <div class="telemetry">
+            <div class="metric">
+              <span class="label">Angle</span>
+              <span class="value" id="angle-value">0°</span>
+              <div class="progress-bar">
+                <div id="angle-bar" class="progress-fill"></div>
+              </div>
+            </div>
+            <div class="metric">
+              <span class="label">Action</span>
+              <span class="value action-text" id="action-value">Center</span>
+            </div>
+            <div class="metric">
+              <span class="label">Gaz (O'ng barm)</span>
+              <span class="value" id="gas-value" style="color: #aaa;">OFF</span>
+            </div>
+            <div class="metric">
+              <span class="label">Tormoz (Chap)</span>
+              <span class="value" id="brake-value" style="color: #aaa;">OFF</span>
+            </div>
+          </div>
+        </div>
+      </main>
+
+      <div class="instructions glass-panel">
+        <h3>Qanday ishlaydi?</h3>
+        <p>
+          1. Kameraga ruxsat bering.<br />
+          2. Ikkala qo'lingizni kameraga ko'rsating.<br />
+          3. Qo'llaringiz o'rtasida virtual rul paydo bo'ladi.<br />
+          4. Haqiqiy rulni buragandek qo'llaringizni burang!
+        </p>
+        <p class="note">
+          Eslatma: Boshqa kompyuter o'yinlarini (NFS, GTA) boshqarish uchun
+          sizga "controller.py" Python dasturini ishga tushirish kerak bo'ladi.
+          Dastur shu papkada saqlangan.
+        </p>
+      </div>
+    </div>
+    <script src="script.js"></script>
+  </body>
+</html>
