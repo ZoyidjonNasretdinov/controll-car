@@ -249,7 +249,7 @@
 
         <!-- Game URL -->
         <div class="url-bar">
-            <input type="text" id="game-url" placeholder="O'yin URL: https://..." value="https://poki.com/g/madalin-stunt-cars-2"/>
+            <input type="text" id="game-url" placeholder="O'yin URL: masalan ./racer/v4.final.html" value="./racer/v4.final.html"/>
             <button onclick="loadGame()">Ochish</button>
         </div>
 
@@ -259,7 +259,7 @@
             2. Rulni buring → ←/→ tugmalar bosiladi<br>
             3. O'ng bosh barmoqni ko'taring → Gaz (↑)<br>
             4. Chap bosh barmoqni ko'taring → Tormoz (↓)<br>
-            5. O'yin URL yozing va <b>Ochish</b> bosing
+            5. O'yin URL yozing va <b>Ochish</b> bosing 
         </div>
     </div>
 
@@ -268,168 +268,13 @@
         <div class="game-placeholder" id="placeholder" style="display:none">
             <div class="icon">🎮</div>
             <div>O'yin URL kiriting va <b>Ochish</b> bosing</div>
-            <small style="color:#444">Masalan: https://poki.com/g/madalin-stunt-cars-2</small>
+            <small style="color:#444">Masalan: ./racer/v4.final.html</small>
         </div>
-        <iframe id="game-frame" src="https://html5.gamedistribution.com/f3ee6674b4ea4579aeefd54d7bf388f0/" allow="fullscreen" style="display:block; width:100%; height:100%; border:none;"></iframe>
+        <iframe id="game-frame" src="./racer/v4.final.html" allow="fullscreen" sandbox="allow-scripts allow-same-origin allow-forms allow-popups" style="display:block; width:100%; height:100%; border:none; background:#000;"></iframe>
     </div>
 </div>
 
-<script>
-// ---- Game loader ----
-function loadGame() {
-    const url = document.getElementById('game-url').value.trim();
-    if (!url) return;
-    const frame = document.getElementById('game-frame');
-    const ph = document.getElementById('placeholder');
-    frame.src = url;
-    frame.style.display = 'block';
-    ph.style.display = 'none';
-    setTimeout(() => frame.focus(), 1000);
-}
-
-// ---- Key injection ----
-function sendKey(key, code, down) {
-    const frame = document.getElementById('game-frame');
-    const type = down ? 'keydown' : 'keyup';
-    const ev = new KeyboardEvent(type, {
-        key, code,
-        keyCode: keyCodeMap[code] || 0,
-        which: keyCodeMap[code] || 0,
-        bubbles: true, cancelable: true
-    });
-    // Send to iframe content if same-origin, else to document
-    try {
-        frame.contentDocument && frame.contentDocument.dispatchEvent(ev);
-        frame.contentWindow && frame.contentWindow.document.dispatchEvent(ev);
-    } catch(e) {}
-    document.dispatchEvent(ev);
-    window.dispatchEvent(ev);
-}
-
-const keyCodeMap = {
-    'ArrowLeft': 37, 'ArrowUp': 38, 'ArrowRight': 39, 'ArrowDown': 40,
-    'KeyA': 65, 'KeyW': 87, 'KeyD': 68, 'KeyS': 83
-};
-
-let state = { left: false, right: false, up: false, down: false };
-
-function pressKey(action, isDown) {
-    const codes = {
-        left:  ['ArrowLeft', 'KeyA'],
-        right: ['ArrowRight', 'KeyD'],
-        up:    ['ArrowUp', 'KeyW'],
-        down:  ['ArrowDown', 'KeyS'],
-    };
-    const pairs = { ArrowLeft:'ArrowLeft', KeyA:'a', ArrowRight:'ArrowRight', KeyD:'d', ArrowUp:'ArrowUp', KeyW:'w', ArrowDown:'ArrowDown', KeyS:'s' };
-    (codes[action] || []).forEach(code => {
-        const key = pairs[code] || code;
-        sendKey(key, code, isDown);
-    });
-}
-
-function setAction(newLeft, newRight, newUp, newDown) {
-    if (newLeft !== state.left) { pressKey('left', newLeft); state.left = newLeft; }
-    if (newRight !== state.right) { pressKey('right', newRight); state.right = newRight; }
-    if (newUp !== state.up) { pressKey('up', newUp); state.up = newUp; }
-    if (newDown !== state.down) { pressKey('down', newDown); state.down = newDown; }
-
-    // Update key UI
-    document.getElementById('key-left').classList.toggle('pressed', newLeft);
-    document.getElementById('key-right').classList.toggle('pressed', newRight);
-    document.getElementById('key-up').classList.toggle('pressed', newUp);
-    document.getElementById('key-down').classList.toggle('pressed', newDown);
-}
-
-// ---- MediaPipe ----
-const videoEl = document.querySelector('.input_video');
-const canvasEl = document.querySelector('.output_canvas');
-const ctx = canvasEl.getContext('2d');
-
-const wheelWrap = document.getElementById('wheel-wrap');
-const cvAngle = document.getElementById('cv-angle');
-const cvAction = document.getElementById('cv-action');
-const cvGas = document.getElementById('cv-gas');
-const cvBrake = document.getElementById('cv-brake');
-const statusEl = document.getElementById('status');
-
-function onResults(results) {
-    ctx.save();
-    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
-    ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
-
-    if (results.multiHandLandmarks) {
-        for (const lm of results.multiHandLandmarks) {
-            drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
-            drawLandmarks(ctx, lm, { color: '#FF0000', lineWidth: 1 });
-        }
-    }
-    ctx.restore();
-
-    const hands = results.multiHandLandmarks;
-    if (hands && hands.length >= 2) {
-        wheelWrap.style.display = 'block';
-        statusEl.textContent = 'AI Aktiv!';
-        statusEl.className = 'status active';
-
-        const c1 = hands[0][9], c2 = hands[1][9];
-        const handL = c1.x < c2.x ? hands[0] : hands[1];
-        const handR = c1.x < c2.x ? hands[1] : hands[0];
-        const cL = c1.x < c2.x ? c1 : c2;
-        const cR = c1.x < c2.x ? c2 : c1;
-
-        const dx = cR.x - cL.x;
-        const dy = cR.y - cL.y;
-        const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
-
-        wheelWrap.style.transform = `rotate(${angleDeg}deg)`;
-        cvAngle.textContent = `${Math.round(angleDeg)}°`;
-
-        const threshold = 18;
-        let doLeft = false, doRight = false;
-        if (angleDeg < -threshold) {
-            doLeft = true;
-            cvAction.textContent = 'Chapga ←';
-            cvAction.style.color = '#ff9933';
-        } else if (angleDeg > threshold) {
-            doRight = true;
-            cvAction.textContent = 'O\'ngga →';
-            cvAction.style.color = '#33ff66';
-        } else {
-            cvAction.textContent = 'To\'g\'ri';
-            cvAction.style.color = '#00ffff';
-        }
-
-        // Thumb-up: tip[4].y < indexMCP[5].y - 0.05
-        const gasOn   = handR[4].y < handR[5].y - 0.05;
-        const brakeOn = handL[4].y < handL[5].y - 0.05;
-
-        cvGas.textContent = gasOn   ? 'ON ✅' : 'OFF';
-        cvGas.style.color = gasOn   ? '#33ff66' : '#aaa';
-        cvBrake.textContent = brakeOn ? 'ON ✅' : 'OFF';
-        cvBrake.style.color = brakeOn ? '#ff3366' : '#aaa';
-
-        setAction(doLeft, doRight, gasOn, brakeOn);
-    } else {
-        wheelWrap.style.display = 'none';
-        statusEl.textContent = 'Qo\'llar aniqlanmadi';
-        statusEl.className = 'status';
-        cvAction.textContent = '—';
-        cvAction.style.color = '#aaa';
-        cvGas.textContent = 'OFF'; cvGas.style.color = '#aaa';
-        cvBrake.textContent = 'OFF'; cvBrake.style.color = '#aaa';
-        setAction(false, false, false, false);
-    }
-}
-
-const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
-hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6, selfieMode: true });
-hands.onResults(onResults);
-
-const camera = new Camera(videoEl, {
-    onFrame: async () => { await hands.send({ image: videoEl }); },
-    width: 640, height: 480
-});
-camera.start();
-</script>
+<script src="./controller.js"></script>
+<script src="./script.js"></script>
 </body>
 </html>

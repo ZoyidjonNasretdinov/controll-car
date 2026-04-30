@@ -1,179 +1,115 @@
-const videoElement = document.getElementsByClassName("input_video")[0];
-const canvasElement = document.getElementsByClassName("output_canvas")[0];
-const canvasCtx = canvasElement.getContext("2d");
+/**
+ * script.js — MediaPipe Vision Logic
+ * Computes steering and gas/brake commands from hand gestures and triggers controller
+ */
 
-const steeringContainer = document.getElementById("steering-wheel-container");
-const angleValue = document.getElementById("angle-value");
-const actionValue = document.getElementById("action-value");
-const statusBadge = document.getElementById("status");
-const gasValue = document.getElementById("gas-value");
-const brakeValue = document.getElementById("brake-value");
+const videoEl = document.querySelector('.input_video');
+const canvasEl = document.querySelector('.output_canvas');
+const ctx = canvasEl.getContext('2d');
 
-let lastAction = "center";
-let lastGas = false;
-let lastBrake = false;
+const wheelWrap = document.getElementById('wheel-wrap');
+const cvAngle = document.getElementById('cv-angle');
+const cvAction = document.getElementById('cv-action');
+const cvGas = document.getElementById('cv-gas');
+const cvBrake = document.getElementById('cv-brake');
+const statusEl = document.getElementById('status');
 
 function onResults(results) {
-  canvasCtx.save();
-  canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+    if(!ctx) return;
+    ctx.save();
+    ctx.clearRect(0, 0, canvasEl.width, canvasEl.height);
+    ctx.drawImage(results.image, 0, 0, canvasEl.width, canvasEl.height);
 
-  // Canvas context naturally matches selfieMode=true without needing extra flipping.
-
-  canvasCtx.drawImage(
-    results.image,
-    0,
-    0,
-    canvasElement.width,
-    canvasElement.height,
-  );
-
-  let twoHandsPresent =
-    results.multiHandLandmarks && results.multiHandLandmarks.length >= 2;
-
-  if (results.multiHandLandmarks) {
-    for (const landmarks of results.multiHandLandmarks) {
-      drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {
-        color: "#00FF00",
-        lineWidth: 3,
-      });
-      drawLandmarks(canvasCtx, landmarks, { color: "#FF0000", lineWidth: 1 });
+    if (results.multiHandLandmarks) {
+        for (const lm of results.multiHandLandmarks) {
+            drawConnectors(ctx, lm, HAND_CONNECTIONS, { color: '#00FF00', lineWidth: 2 });
+            drawLandmarks(ctx, lm, { color: '#FF0000', lineWidth: 1 });
+        }
     }
-  }
-  canvasCtx.restore();
+    ctx.restore();
 
-  if (twoHandsPresent) {
-    steeringContainer.style.display = "block";
+    const handsDetect = results.multiHandLandmarks;
+    if (handsDetect && handsDetect.length >= 2) {
+        if(wheelWrap) wheelWrap.style.display = 'block';
+        if(statusEl) {
+            statusEl.textContent = 'AI Aktiv!';
+            statusEl.className = 'status active';
+        }
 
-    statusBadge.textContent = "AI Aktiv!";
-    statusBadge.className = "status active";
+        const c1 = handsDetect[0][9], c2 = handsDetect[1][9];
+        // Ensure hands are identified as Left / Right based on x coordinates
+        const handL = c1.x < c2.x ? handsDetect[0] : handsDetect[1];
+        const handR = c1.x < c2.x ? handsDetect[1] : handsDetect[0];
+        const cL = c1.x < c2.x ? c1 : c2;
+        const cR = c1.x < c2.x ? c2 : c1;
 
-    const hand1 = results.multiHandLandmarks[0];
-    const hand2 = results.multiHandLandmarks[1];
+        const dx = cR.x - cL.x;
+        const dy = cR.y - cL.y;
+        const angleDeg = Math.atan2(dy, dx) * (180 / Math.PI);
 
-    const center1 = hand1[9];
-    const center2 = hand2[9];
+        if(wheelWrap) wheelWrap.style.transform = `rotate(${angleDeg}deg)`;
+        if(cvAngle) cvAngle.textContent = `${Math.round(angleDeg)}°`;
 
-    let fullHandA = center1.x < center2.x ? hand1 : hand2; // User's Left hand
-    let fullHandB = center1.x < center2.x ? hand2 : hand1; // User's Right hand
-    
-    let handA = center1.x < center2.x ? center1 : center2;
-    let handB = center1.x < center2.x ? center2 : center1;
+        const threshold = 18;
+        let doLeft = false, doRight = false;
+        
+        if (angleDeg < -threshold) {
+            doLeft = true;
+            if(cvAction) {
+                cvAction.textContent = 'Chapga ←';
+                cvAction.style.color = '#ff9933';
+            }
+        } else if (angleDeg > threshold) {
+            doRight = true;
+            if(cvAction) {
+                cvAction.textContent = 'O\'ngga →';
+                cvAction.style.color = '#33ff66';
+            }
+        } else {
+            if(cvAction) {
+                cvAction.textContent = 'To\'g\'ri';
+                cvAction.style.color = '#00ffff';
+            }
+        }
 
-    const dx = handB.x - handA.x;
-    const dy = handB.y - handA.y;
+        // Thumb up logic: higher cursor in canvas means smaller y
+        const gasOn   = handR[4].y < handR[5].y - 0.05;
+        const brakeOn = handL[4].y < handL[5].y - 0.05;
 
-    let angleRad = Math.atan2(dy, dx);
-    let angleDeg = angleRad * (180 / Math.PI);
+        if(cvGas) {
+            cvGas.textContent = gasOn   ? 'ON ✅' : 'OFF';
+            cvGas.style.color = gasOn   ? '#33ff66' : '#aaa';
+        }
+        if(cvBrake) {
+            cvBrake.textContent = brakeOn ? 'ON ✅' : 'OFF';
+            cvBrake.style.color = brakeOn ? '#ff3366' : '#aaa';
+        }
 
-    steeringContainer.style.transform = `rotate(${angleDeg}deg)`;
-    angleValue.textContent = `${Math.round(angleDeg)}°`;
-
-    let threshold = 18; 
-    let action = "center";
-
-    if (angleDeg < -threshold) {
-      action = "left";
-      actionValue.textContent = "Chapga (Left)";
-      actionValue.style.color = "#ff3366";
-      actionValue.style.textShadow = "0 0 10px #ff3366";
-    } else if (angleDeg > threshold) {
-      action = "right";
-      actionValue.textContent = "O'ngga (Right)";
-      actionValue.style.color = "#33ff66";
-      actionValue.style.textShadow = "0 0 10px #33ff66";
+        if (typeof window.setAction === 'function') {
+            window.setAction(doLeft, doRight, gasOn, brakeOn);
+        }
     } else {
-      action = "center";
-      actionValue.textContent = "To'g'ri";
-      actionValue.style.color = "#00ffff";
-      actionValue.style.textShadow = "0 0 10px rgba(0, 255, 255, 0.5)";
+        if(wheelWrap) wheelWrap.style.display = 'none';
+        if(statusEl) {
+            statusEl.textContent = 'Qo\'llar aniqlanmadi';
+            statusEl.className = 'status';
+        }
+        if(cvAction) { cvAction.textContent = '—'; cvAction.style.color = '#aaa'; }
+        if(cvGas) { cvGas.textContent = 'OFF'; cvGas.style.color = '#aaa'; }
+        if(cvBrake) { cvBrake.textContent = 'OFF'; cvBrake.style.color = '#aaa'; }
+        
+        if (typeof window.setAction === 'function') {
+            window.setAction(false, false, false, false);
+        }
     }
-
-    let thumbTipBtnB = fullHandB[4];
-    let indexMcpBtnB = fullHandB[5];
-    let isGasOn = (thumbTipBtnB.y < indexMcpBtnB.y - 0.05);
-
-    let thumbTipBtnA = fullHandA[4];
-    let indexMcpBtnA = fullHandA[5];
-    let isBrakeOn = (thumbTipBtnA.y < indexMcpBtnA.y - 0.05);
-
-    if (isGasOn) {
-      gasValue.textContent = "ON (Gaz)";
-      gasValue.style.color = "#33ff66";
-      gasValue.style.textShadow = "0 0 10px #33ff66";
-    } else {
-      gasValue.textContent = "OFF";
-      gasValue.style.color = "#aaa";
-      gasValue.style.textShadow = "none";
-    }
-
-    if (isBrakeOn) {
-      if(brakeValue) {
-          brakeValue.textContent = "ON (Tormoz)";
-          brakeValue.style.color = "#ff3366";
-          brakeValue.style.textShadow = "0 0 10px #ff3366";
-      }
-    } else {
-      if(brakeValue) {
-          brakeValue.textContent = "OFF";
-          brakeValue.style.color = "#aaa";
-          brakeValue.style.textShadow = "none";
-      }
-    }
-
-    if (action !== lastAction || isGasOn !== lastGas || isBrakeOn !== lastBrake) {
-      fetch(`http://localhost:5000/steer?action=${action}&gas=${isGasOn}&brake=${isBrakeOn}`).catch((e) => {});
-      lastAction = action;
-      lastGas = isGasOn;
-      lastBrake = isBrakeOn;
-    }
-  } else {
-    steeringContainer.style.display = "none";
-    angleValue.textContent = "0°";
-    actionValue.textContent = "Kutilyapti...";
-    actionValue.style.color = "#aaa";
-    actionValue.style.textShadow = "none";
-    statusBadge.textContent = "Qo'llar aniqlanmadi";
-    statusBadge.className = "status";
-    
-    if (gasValue) {
-      gasValue.textContent = "OFF";
-      gasValue.style.color = "#aaa";
-      gasValue.style.textShadow = "none";
-    }
-    if (brakeValue) {
-      brakeValue.textContent = "OFF";
-      brakeValue.style.color = "#aaa";
-      brakeValue.style.textShadow = "none";
-    }
-
-    if (lastAction !== "center" || lastGas !== false || lastBrake !== false) {
-      fetch(`http://localhost:5000/steer?action=center&gas=false&brake=false`).catch((e) => {});
-      lastAction = "center";
-      lastGas = false;
-      lastBrake = false;
-    }
-  }
 }
 
-const hands = new Hands({
-  locateFile: (file) => {
-    return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-  },
-});
-hands.setOptions({
-  maxNumHands: 2,
-  modelComplexity: 1,
-  minDetectionConfidence: 0.6,
-  minTrackingConfidence: 0.6,
-  selfieMode: true,
-});
+const hands = new Hands({ locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}` });
+hands.setOptions({ maxNumHands: 2, modelComplexity: 1, minDetectionConfidence: 0.6, minTrackingConfidence: 0.6, selfieMode: true });
 hands.onResults(onResults);
 
-const camera = new Camera(videoElement, {
-  onFrame: async () => {
-    await hands.send({ image: videoElement });
-  },
-  width: 640,
-  height: 480,
-});
+const camera = new Camera(videoEl, {
+    onFrame: async () => { await hands.send({ image: videoEl }); },
+    width: 640, height: 480
+}); 
 camera.start();

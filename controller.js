@@ -1,118 +1,90 @@
 /**
- * controller.js — PC o'yinlarini Node.js va robotjs yordamida boshqarish
- *
- * Ishga tushurish:
- *   npm install robotjs
- *   node controller.js
- *
- * So'ng brauzerdan: http://localhost:5000/steer?action=left&gas=true&brake=false
+ * controller.js — Browser-based Car Controller
+ * Handles keyboard event simulation within the browser and iframe, removing Node.js backend
  */
 
-const http = require('http');
-const url  = require('url');
+let state = { left: false, right: false, up: false, down: false };
 
-let robot;
-try {
-  robot = require('robotjs');
-} catch (e) {
-  console.log('====================================');
-  console.log("XATOLIK: robotjs moduli o'rnatilmagan.");
-  console.log("Iltimos terminalda yozing: npm install robotjs");
-  console.log('====================================');
-  process.exit(1);
+const keyCodeMap = {
+    'ArrowLeft': 37, 'ArrowUp': 38, 'ArrowRight': 39, 'ArrowDown': 40,
+    'KeyA': 65, 'KeyW': 87, 'KeyD': 68, 'KeyS': 83
+};
+
+function sendKey(key, code, down) {
+    const frame = document.getElementById('game-frame');
+    if (!frame) return;
+    
+    const type = down ? 'keydown' : 'keyup';
+    const ev = new KeyboardEvent(type, {
+        key: key, 
+        code: code,
+        keyCode: keyCodeMap[code] || 0,
+        which: keyCodeMap[code] || 0,
+        bubbles: true, 
+        cancelable: true
+    });
+    
+    try {
+        if (frame.contentDocument) frame.contentDocument.dispatchEvent(ev);
+        if (frame.contentWindow) frame.contentWindow.document.dispatchEvent(ev);
+    } catch(e) {}
+    document.dispatchEvent(ev);
+    window.dispatchEvent(ev);
 }
 
-// ---- Holat ----
-let currentAction = 'center';
-let gasPressed    = false;
-let brakePressed  = false;
-
-// ---- Joriy bosilgan tugmalar ----
-let leftAct  = false;
-let rightAct = false;
-let gasAct   = false;
-let brakeAct = false;
-
-// ---- Klaviatura yordamchilari ----
-function pressKey(key) {
-  try { robot.keyToggle(key, 'down'); } catch (_) {}
-}
-function releaseKey(key) {
-  try { robot.keyToggle(key, 'up'); } catch (_) {}
-}
-
-// robotjs kalit nomlari: 'left', 'right', 'up', 'down', 'a', 'd', 'w', 's'
-
-function applyKeys() {
-  // ---- CHAP ----
-  if (currentAction === 'left') {
-    if (rightAct) { releaseKey('right'); releaseKey('d'); rightAct = false; }
-    if (!leftAct) { pressKey('left');    pressKey('a');   leftAct  = true;  }
-  }
-  // ---- O'NG ----
-  else if (currentAction === 'right') {
-    if (leftAct)  { releaseKey('left');  releaseKey('a'); leftAct  = false; }
-    if (!rightAct){ pressKey('right');   pressKey('d');   rightAct = true;  }
-  }
-  // ---- MARKAZDA ----
-  else {
-    if (leftAct)  { releaseKey('left');  releaseKey('a'); leftAct  = false; }
-    if (rightAct) { releaseKey('right'); releaseKey('d'); rightAct = false; }
-  }
-
-  // ---- GAZ ----
-  if (gasPressed && !gasAct) {
-    pressKey('up'); pressKey('w'); gasAct = true;
-  } else if (!gasPressed && gasAct) {
-    releaseKey('up'); releaseKey('w'); gasAct = false;
-  }
-
-  // ---- TORMOZ ----
-  if (brakePressed && !brakeAct) {
-    pressKey('down'); pressKey('s'); brakeAct = true;
-  } else if (!brakePressed && brakeAct) {
-    releaseKey('down'); releaseKey('s'); brakeAct = false;
-  }
+function pressKey(action, isDown) {
+    const codes = {
+        left:  ['ArrowLeft', 'KeyA'],
+        right: ['ArrowRight', 'KeyD'],
+        up:    ['ArrowUp', 'KeyW'],
+        down:  ['ArrowDown', 'KeyS'],
+    };
+    const pairs = { 
+        ArrowLeft:'ArrowLeft', KeyA:'a', 
+        ArrowRight:'ArrowRight', KeyD:'d', 
+        ArrowUp:'ArrowUp', KeyW:'w', 
+        ArrowDown:'ArrowDown', KeyS:'s' 
+    };
+    
+    (codes[action] || []).forEach(code => {
+        const key = pairs[code] || code;
+        sendKey(key, code, isDown);
+    });
 }
 
-// ---- HTTP Server ----
-const server = http.createServer((req, res) => {
-  const parsed = url.parse(req.url, true);
+function setAction(newLeft, newRight, newUp, newDown) {
+    if (newLeft !== state.left) { pressKey('left', newLeft); state.left = newLeft; }
+    if (newRight !== state.right) { pressKey('right', newRight); state.right = newRight; }
+    if (newUp !== state.up) { pressKey('up', newUp); state.up = newUp; }
+    if (newDown !== state.down) { pressKey('down', newDown); state.down = newDown; }
 
-  if (parsed.pathname === '/steer') {
-    const q = parsed.query;
-    if (q.action !== undefined) currentAction = q.action;
-    if (q.gas    !== undefined) gasPressed    = q.gas.toLowerCase()   === 'true';
-    if (q.brake  !== undefined) brakePressed  = q.brake.toLowerCase() === 'true';
-
-    // Tugmalarni darhol qo'llaymiz
-    applyKeys();
-  }
-
-  res.writeHead(200, {
-    'Access-Control-Allow-Origin': '*',
-    'Content-Type': 'application/json',
-  });
-  res.end('{"status":"ok"}');
-});
-
-// ---- Chiqishda hamma tugmalarni bo'shatish ----
-function releaseAll() {
-  ['left','right','up','down','a','d','w','s'].forEach(k => {
-    try { robot.keyToggle(k, 'up'); } catch (_) {}
-  });
+    // Update key UI visually
+    const keyLeft = document.getElementById('key-left');
+    const keyRight = document.getElementById('key-right');
+    const keyUp = document.getElementById('key-up');
+    const keyDown = document.getElementById('key-down');
+    
+    if (keyLeft) keyLeft.classList.toggle('pressed', newLeft);
+    if (keyRight) keyRight.classList.toggle('pressed', newRight);
+    if (keyUp) keyUp.classList.toggle('pressed', newUp);
+    if (keyDown) keyDown.classList.toggle('pressed', newDown);
 }
-process.on('SIGINT',  () => { releaseAll(); process.exit(); });
-process.on('SIGTERM', () => { releaseAll(); process.exit(); });
 
-// ---- Serverni ishga tushurish ----
-const PORT = 5000;
-server.listen(PORT, () => {
-  console.log('====================================');
-  console.log(`Server http://localhost:${PORT} ishga tushdi...`);
-  console.log("O'yinlar uchun ARROWS (up,down..) VA W,A,S,D baravar bosiladi!");
-  console.log("Barcha web va PC o'yinlariga mos keladi.");
-  console.log("To'xtatish uchun: Ctrl+C");
-  console.log('====================================');
-  console.log("Dastur tayyor! O'yin oynasini Active qilishni unutmang!");
-});
+function loadGame() {
+    const url = document.getElementById('game-url').value.trim();
+    if (!url) return;
+    const frame = document.getElementById('game-frame');
+    const ph = document.getElementById('placeholder');
+    if (!frame || !ph) return;
+    frame.src = url;
+    frame.style.display = 'block';
+    ph.style.display = 'none';
+    setTimeout(() => {
+        if(frame.contentWindow) frame.contentWindow.focus();
+        frame.focus();
+    }, 1000);
+}
+
+// Expose functions globally so UI elements and script.js can use them
+window.setAction = setAction;
+window.loadGame = loadGame;
